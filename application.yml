@@ -1,0 +1,24 @@
+server:
+  port: 8080
+spring:
+  datasource:
+    username: root
+    password: ******
+    url: jdbc:mysql://localhost:3306/search_engine?serverTimezone=Europe/Moscow
+  jpa:
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQL8Dialect
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+
+indexing-settings:
+  sites:
+    - url: https://www.volochek.life
+      name: Volochek
+    - url: https://www.playback.ru
+      name: PlayBack.Ru
+    - url: https://www.ipfran.ru
+      name: ИПФ РАН
+
