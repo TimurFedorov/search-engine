@@ -1,30 +1,26 @@
 package searchengine.services.impl;
 
-import lombok.AllArgsConstructor;
 import lombok.RequiredArgsConstructor;
-import org.jsoup.Connection;
-import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
-import org.jsoup.nodes.Element;
-import org.jsoup.select.Elements;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import searchengine.config.SitesList;
 import searchengine.dto.indexing.IndexingResponse;
-import searchengine.dto.indexing.RussianLemmaFinder;
-import searchengine.model.*;
+import searchengine.dto.indexing.PageIndexer;
+import searchengine.dto.indexing.SiteInformationAdder;
+import searchengine.model.Page;
+import searchengine.model.Site;
+import searchengine.model.Status;
 import searchengine.repositories.IndexRepository;
 import searchengine.repositories.LemmaRepository;
 import searchengine.repositories.PageRepository;
 import searchengine.repositories.SiteRepository;
 import searchengine.services.IndexingService;
 
-import java.io.IOException;
 import java.time.LocalDateTime;
-import java.util.*;
-import java.util.concurrent.CopyOnWriteArraySet;
+import java.util.ArrayList;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ForkJoinPool;
-import java.util.concurrent.RecursiveTask;
 
 
 @Service
@@ -44,26 +40,16 @@ public class IndexingServiceImpl implements IndexingService {
     private static ArrayList<Thread> threads = new ArrayList<>();
     private ArrayList<ForkJoinPool> pools = new ArrayList<>();
 
-    private volatile boolean isCanceled = false;
-
-    private static RussianLemmaFinder russianLemmaFinder;
-
-    static {
-        try {
-            russianLemmaFinder = new RussianLemmaFinder();
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+    private static volatile boolean isCanceled = false;
+    public static boolean isCanceled() {
+        return isCanceled;
     }
 
     @Override
     public IndexingResponse startIndexing() {
-        IndexingResponse response = new IndexingResponse();
 
         if (threadIsAlive()) {
-            response.setResult(false);
-            response.setError("Индексация уже запущена");
-            return response;
+            return falseResponse("Индексация уже запущена");
         }
 
         threads.clear();
@@ -72,7 +58,7 @@ public class IndexingServiceImpl implements IndexingService {
         for (int i = 0; i < sites.getSites().size(); i++) {
             int threadNumber = i;
             Runnable task = () -> {
-                String url = getCorrectUrlFormat(sites.getSites().get(threadNumber).getUrl());
+                String url = SiteInformationAdder.getCorrectUrlFormat(sites.getSites().get(threadNumber).getUrl());
                 siteIndexer(url, sites.getSites().get(threadNumber).getName());
             };
             Thread thread = new Thread(task);
@@ -80,25 +66,20 @@ public class IndexingServiceImpl implements IndexingService {
         }
         threads.forEach(Thread::start);
 
-        response.setResult(true);
-        return response;
+        return trueResponse();
     }
 
     @Override
     public IndexingResponse stopIndexing() {
-        IndexingResponse response = new IndexingResponse();
 
         if (!threadIsAlive()) {
-            response.setResult(false);
-            response.setError("Индексация не запущена");
-            return response;
+            return falseResponse("Индексация не запущена");
         }
 
         pools.forEach(ForkJoinPool::shutdownNow);
         isCanceled = true;
         for (ForkJoinPool pool : pools) {
-            while (pool.isTerminating()){
-            }
+            while (pool.isTerminating()) {}
         }
         threads.clear();
         pools.clear();
@@ -106,137 +87,88 @@ public class IndexingServiceImpl implements IndexingService {
 
         siteRepository.findAll().forEach(this::addSiteFailedStatus);
 
-        response.setResult(true);
-        return response;
+        return trueResponse();
     }
 
-    private void siteIndexer (String url, String name) {
+    private void siteIndexer(String url, String name) {
 
-         if (siteRepository.findByUrl(url).isPresent()) {
-            Site siteForDelete = siteRepository.findByUrl(url).get();
-            for (Page page : pageRepository.findAllBySite(siteForDelete)) {
-                indexRepository.deleteAllByPage(page);
-            }
-            lemmaRepository.deleteAllBySite(siteForDelete);
-            pageRepository.deleteAllBySite(siteForDelete);
-            siteRepository.delete(siteForDelete);
-         }
-         Site site = new Site();
-         site.setName(name);
-         site.setUrl(url);
-         site.setStatus(Status.INDEXING);
-         site.setStatusTime(LocalDateTime.now());
-         siteRepository.save(site);
-
-         ForkJoinPool forkJoinPool = new ForkJoinPool(numberOfCores);
-         pools.add(forkJoinPool);
-         String pages = forkJoinPool.invoke(new PageIndexer(site, site.getUrl(), new CopyOnWriteArraySet<>()));
-
-         if (!site.getStatus().equals(Status.FAILED)) {
-             site.setStatus(Status.INDEXED);
-             site.setStatusTime(LocalDateTime.now());
-             siteRepository.save(site);
-         }
-    }
-
-    @AllArgsConstructor
-    private class PageIndexer extends RecursiveTask<String> {
-        private Site site;
-        private String url;
-        private CopyOnWriteArraySet<String> allPages;
-
-        @Override
-        protected String compute() {
-
-            StringBuilder stringBuilder = new StringBuilder(url + "\n");
-            Set<PageIndexer> pageIndexers = new TreeSet<>(Comparator.comparing(o -> o.url));
-
-            Document document = addPage(site, url);
-            Elements elements = document.select("a[href]");
-            for (Element element : elements) {
-                if (isCanceled) {
-                    break;
-                }
-                String attributeUrl = getCorrectUrlFormat(element.absUrl("href"));
-                if (   (attributeUrl.startsWith(url))
-                        && !attributeUrl.contains("#")
-                        && !allPages.contains(attributeUrl) ) {
-                    PageIndexer links = new PageIndexer(site, attributeUrl, allPages);
-                    links.fork();
-                    pageIndexers.add(links);
-                    allPages.add(attributeUrl);
-                }
-            }
-            for (PageIndexer link : pageIndexers) {
-                stringBuilder.append(link.join());
-            }
-            return stringBuilder.toString();
+        if (siteRepository.findByUrl(url).isPresent()) {
+            url = deleteSiteInformation(url);
         }
-    }
+        Site site = addNewSite(url, name, Status.INDEXING);
 
-    private Document addPage(Site site, String url) {
-        try {
-            Thread.sleep(150);
-            Connection.Response connectionResponse = getConnectionResponse(url);
-            Document document = connectionResponse.parse();
-            String path = url.startsWith("https://www.") ?
-                    url.substring(site.getUrl().length() - 1) :
-                    url.substring(site.getUrl().length() - 5);
-            if (!pageRepository.findByPathAndSite(path, site).isPresent()
-                    && !pageRepository.findByPathAndSite(path.concat("/"), site).isPresent()) {
-                Page page = new Page();
-                page.setSite(site);
-                page.setPath(path);
-                page.setContent(document.toString());
-                page.setCode(connectionResponse.statusCode());
-                pageRepository.save(page);
-                if (page.getCode() < 400) {
-                    addRussianLemmas(document, site, page);
-                }
+        ForkJoinPool forkJoinPool = new ForkJoinPool(numberOfCores);
+        pools.add(forkJoinPool);
+        String pages = forkJoinPool.invoke(new PageIndexer(
+                new SiteInformationAdder(siteRepository, pageRepository, indexRepository, lemmaRepository),
+                site, url, new CopyOnWriteArrayList<>()));
 
-                site.setStatusTime(LocalDateTime.now());
-                siteRepository.save(site);
-            }
-            return document;
-
-        } catch (InterruptedException | IOException e) {
-            site.setLastError(e.getClass().getSimpleName().concat(" ").concat(e.getMessage()));
-            site.setStatus(Status.FAILED);
+        if (!site.getStatus().equals(Status.FAILED)) {
+            site.setStatus(Status.INDEXED);
+            site.setStatusTime(LocalDateTime.now());
             siteRepository.save(site);
         }
-        return null;
     }
 
-    private synchronized void addRussianLemmas(Document document, Site site, Page page) throws IOException {
+    @Override
+    public IndexingResponse OnePageParser(String url) {
 
-        HashMap<String, Integer> lemmas = russianLemmaFinder.collectLemmas(document.toString());
-
-        for (String lemmaText : lemmas.keySet()) {
-            if (isCanceled) {
-                break;
-            }
-            Lemma lemma;
-            if (lemmaRepository.findByTextAndSite(lemmaText,site).isPresent()) {
-                lemma = lemmaRepository.findByTextAndSite(lemmaText,site).get();
-                lemma.setFrequency(lemma.getFrequency() + 1);
-            }
-            else {
-                lemma = new Lemma();
-                lemma.setSite(site);
-                lemma.setFrequency(1);
-            }
-            lemma.setText(lemmaText);
-            lemmaRepository.save(lemma);
-            addIndex(lemma, page, lemmas.get(lemmaText));
+        if (threadIsAlive()) {
+            return falseResponse("Индексация уже запущена");
         }
+
+        url = SiteInformationAdder.getCorrectUrlFormat(url);
+        String siteUrl = null;
+        String siteName = null;
+        boolean siteIsInConfig = false;
+        for (searchengine.config.Site siteCfg : sites.getSites()) {
+            if (url.startsWith(SiteInformationAdder.getCorrectUrlFormat(siteCfg.getUrl()))) {
+                siteIsInConfig = true;
+                siteUrl = SiteInformationAdder.getCorrectUrlFormat(siteCfg.getUrl());
+                siteName = siteCfg.getName();
+            }
+        }
+
+        if (!siteIsInConfig) {
+            return falseResponse("Данная страница находится за пределами сайтов, указанных в конфигурационном файле");
+        }
+
+        Site site = addSiteForOnePage(url, siteUrl, siteName);
+        var siteInfo = new SiteInformationAdder(siteRepository, pageRepository, indexRepository, lemmaRepository);
+        Document page = siteInfo.addOnePage(site,url);
+
+        return trueResponse();
     }
 
-    private void addIndex (Lemma lemma,Page page, int rank) {
-        Index index = new Index();
-        index.setPage(page);
-        index.setLemma(lemma);
-        index.setRank(rank);
-        indexRepository.save(index);
+    private Site addSiteForOnePage (String url, String siteUrl, String siteName) {
+        for (Site site : siteRepository.findAll()) {
+            if (url.startsWith(site.getUrl())) {
+                return site;
+            }
+        }
+        return addNewSite(siteUrl, siteName, Status.INDEXED);
+    }
+
+
+    private Site addNewSite (String url, String name, Status status) {
+        Site site = new Site();
+        site.setName(name);
+        site.setUrl(url);
+        site.setStatus(status);
+        site.setStatusTime(LocalDateTime.now());
+        siteRepository.save(site);
+        return site;
+    }
+
+    private String deleteSiteInformation (String url) {
+        Site siteForDelete = siteRepository.findByUrl(url).get();
+        for (Page page : pageRepository.findAllBySite(siteForDelete)) {
+            indexRepository.deleteAllByPage(page);
+        }
+        lemmaRepository.deleteAllBySite(siteForDelete);
+        pageRepository.deleteAllBySite(siteForDelete);
+        siteRepository.delete(siteForDelete);
+        return url;
     }
 
     private void addSiteFailedStatus (Site site) {
@@ -249,35 +181,21 @@ public class IndexingServiceImpl implements IndexingService {
         siteRepository.save(site);
     }
 
-    protected static String getCorrectUrlFormat (String url) {
-        url = url.replace("http://", "https://");
-        url = url.lastIndexOf("/") == url.length() - 1 ? url : url.concat("/");
-        if (url.startsWith("https://www.")) {
-            return url;
-        }
-        else if (url.startsWith("https://")) {
-            return url.replace("https://", "https://www.");
-        }
-        else if (url.startsWith("www.")) {
-            return "https://".concat(url);
-        }
-        else {
-            return "https://www.".concat(url);
-        }
-    }
-
-    protected static Connection.Response getConnectionResponse(String url) throws IOException {
-        return Jsoup.connect(url)
-                .ignoreContentType(true)
-                .ignoreHttpErrors(true)
-                .userAgent("Mozilla/5.0 (Windows; U; WindowsNT 5.1; en-US; rv1.8.1.6) Gecko/20070725 Firefox/2.0.0.6")
-                .referrer("http://www.google.com")
-                .execute();
-    }
-
     public static boolean threadIsAlive() {
         return threads.stream().anyMatch(Thread::isAlive);
     }
 
+    private IndexingResponse trueResponse () {
+        IndexingResponse response = new IndexingResponse();
+        response.setResult(true);
+        return response;
+    }
+
+    private IndexingResponse falseResponse (String message) {
+        IndexingResponse response = new IndexingResponse();
+        response.setResult(false);
+        response.setError(message);
+        return response;
+    }
 }
 

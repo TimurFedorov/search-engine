@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import searchengine.config.SitesList;
+import searchengine.dto.indexing.SiteInformationAdder;
 import searchengine.dto.statistics.DetailedStatisticsItem;
 import searchengine.dto.statistics.StatisticsData;
 import searchengine.dto.statistics.StatisticsResponse;
@@ -36,7 +37,7 @@ public class StatisticsServiceImpl implements StatisticsService {
     private int siteCount;
 
     @Override
-    public StatisticsResponse getStatistics() {
+    public synchronized StatisticsResponse getStatistics() {
 
         siteCount = sites.getSites().size();
 
@@ -64,7 +65,7 @@ public class StatisticsServiceImpl implements StatisticsService {
         List<DetailedStatisticsItem> detailed = new ArrayList<>();
         for (int i = 0; i < siteCount; i++) {
             String name = sites.getSites().get(i).getName();
-            String url = IndexingServiceImpl.getCorrectUrlFormat(sites.getSites().get(i).getUrl());
+            String url = SiteInformationAdder.getCorrectUrlFormat(sites.getSites().get(i).getUrl());
             detailed.add(item(name, url));
         }
         return detailed;

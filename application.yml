@@ -15,10 +15,9 @@ spring:
 
 indexing-settings:
   sites:
-    - url: https://www.volochek.life
-      name: Volochek
+    - url: https://et-cetera.ru/
+      name: Театр Et-cetera
     - url: https://www.playback.ru
       name: PlayBack.Ru
     - url: https://www.ipfran.ru
       name: ИПФ РАН
-

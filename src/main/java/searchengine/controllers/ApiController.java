@@ -6,9 +6,7 @@ import org.springframework.web.bind.annotation.*;
 import searchengine.dto.indexing.IndexingResponse;
 import searchengine.dto.search.SearchResponse;
 import searchengine.dto.statistics.StatisticsResponse;
-import searchengine.model.Site;
 import searchengine.services.IndexingService;
-import searchengine.services.OnePageIndexService;
 import searchengine.services.SearchService;
 import searchengine.services.StatisticsService;
 
@@ -20,8 +18,6 @@ public class ApiController {
     private final StatisticsService statisticsService;
 
     private final IndexingService indexingService;
-
-    private final OnePageIndexService onePageIndexService;
 
     private final SearchService searchService;
 
@@ -42,7 +38,7 @@ public class ApiController {
 
     @PostMapping("/indexPage")
     public ResponseEntity<IndexingResponse>  indexPage (@RequestParam String url){
-        return ResponseEntity.ok(onePageIndexService.OnePageParser(url));
+        return ResponseEntity.ok(indexingService.OnePageParser(url));
     }
 
     @GetMapping("/search")

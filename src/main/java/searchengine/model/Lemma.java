@@ -12,7 +12,7 @@ import java.util.List;
 public class Lemma {
     @Id
     @GeneratedValue (strategy = GenerationType.AUTO)
-    private Integer id;
+    private Long id;
 
     @ManyToOne
     @JoinColumn(name = "site_id", nullable = false)
