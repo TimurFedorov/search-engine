@@ -3,11 +3,13 @@ package searchengine.services.impl;
 import lombok.RequiredArgsConstructor;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import searchengine.dto.indexing.RussianLemmaFinder;
 import searchengine.dto.search.SearchData;
 import searchengine.dto.search.SearchResponse;
+import searchengine.indexing.RussianLemmaFinder;
 import searchengine.model.Index;
 import searchengine.model.Lemma;
 import searchengine.model.Page;
@@ -33,6 +35,16 @@ public class SearchServiceImpl implements SearchService {
     private LemmaRepository lemmaRepository;
     @Autowired
     private IndexRepository indexRepository;
+
+    private static RussianLemmaFinder russianLemmaFinder;
+
+    {
+        try {
+            russianLemmaFinder = new RussianLemmaFinder();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
 
     @Override
     public SearchResponse startSearch(String query, String url) {
@@ -62,10 +74,9 @@ public class SearchServiceImpl implements SearchService {
             siteList.add(siteRepository.findByUrl(url).get());
         }
 
-        RussianLemmaFinder russianLemmaFinder = createRussianLemmaFinder();
         for (Site site : siteList) {
             List<Lemma> queryLemmas = sortedExistingLemmaList(russianLemmaFinder.getLemmaSet(query), site);
-            List<Page> pages = findPagesByLemmas(queryLemmas);
+            List<Page> pages = findPagesByQueryLemmas(queryLemmas);
             for (Page page : pages) {
                 data.add(PageData(page, site, query, queryLemmas));
             }
@@ -92,8 +103,7 @@ public class SearchServiceImpl implements SearchService {
         pageData.setUri(page.getPath());
         pageData.setSiteName(site.getName());
         String html = page.getContent();
-        Document document = Jsoup.parse(html);
-        pageData.setTitle(document.title());
+        pageData.setTitle(Jsoup.parse(html).title());
         pageData.setSnippet(addSnippet(html, query));
         pageData.setRelevance(indexRepository.findIndexRank(page, lemmas).stream().mapToInt(Integer::intValue).sum());
         return pageData;
@@ -101,31 +111,22 @@ public class SearchServiceImpl implements SearchService {
 
     private String addSnippet(String html, String query) {
 
+        List<String> queryArray = Arrays.stream(query.trim().toLowerCase().split("\\s+"))
+                .filter(i -> !russianLemmaFinder.checkWordIsParticle(i)).toList();
         StringBuilder snippet = new StringBuilder();
-        html = html.toLowerCase().replaceAll("([^а-я\\s])", " ").trim();
-        String[] queryArray = query.trim().toLowerCase().split("\\s+");
-        for (int i = 0; i < queryArray.length; i++) {
-            String word = queryArray[i];
-            int wordIndex = html.indexOf(word);
-            if (wordIndex == -1) {
-                continue;
-            }
-            int start = (wordIndex - 20) > 20 ? (wordIndex - 20) : wordIndex;
-            int finish = start + 51 > html.length() ? html.length() - 1 : start + 50;
+        Document doc = Jsoup.parse(html);
 
-            snippet.append(" ... ");
-            snippet.append(html, start, wordIndex);
-            snippet.append("<b>");
-            snippet.append(word);
-            snippet.append("</b>");
-            snippet.append(html, wordIndex + word.length(), finish);
-        }
-        snippet.append(" ... ");
+        String description = addDescription(doc, queryArray);
+        snippet.append(description.concat(" ... "));
+        String keyWords = addKeyWords(doc,queryArray,snippet.length());
+        snippet.append(keyWords);
+        String additionalWords = addSomeWords(html,queryArray,snippet.length());
+        snippet.append(additionalWords);
 
         return snippet.toString();
     }
 
-    private List<Page> findPagesByLemmas(List<Lemma> lemmas) {
+    private List<Page> findPagesByQueryLemmas(List<Lemma> lemmas) {
         if (lemmas.isEmpty()) {
             return new ArrayList<>();
         }
@@ -145,11 +146,70 @@ public class SearchServiceImpl implements SearchService {
                 .collect(Collectors.toList());
     }
 
-    private RussianLemmaFinder createRussianLemmaFinder() {
-        try {
-            return new RussianLemmaFinder();
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+    private String addDescription (Document doc, List<String> queryArray) {
+        String description = doc.getElementsByAttributeValue("name", "description").get(0).attr("content");
+        return markInBold(description, queryArray);
     }
+
+    private String addKeyWords(Document doc, List<String> queryArray, int length) {
+        StringBuilder keyWords = new StringBuilder();
+        Elements elements = doc.select("a");
+        for (Element e : elements) {
+            if (length + keyWords.length() > 220) {
+                break;
+            }
+            String text = e.text().toLowerCase();
+            if (queryArray.stream().anyMatch(x -> text.contains(x))) {
+                keyWords.append(markInBold(text, queryArray).concat(" ... "));
+            }
+        }
+        return keyWords.toString();
+    }
+
+    private String addSomeWords (String html, List<String> queryArray, int length) {
+        html = html.toLowerCase()
+                .replaceAll("([^а-я\\s])", " ")
+                .replaceAll("\\s+", " ").trim();
+        StringBuilder someWords = new StringBuilder();
+
+        for (int i = 0; i < queryArray.size(); i++) {
+            if (length + someWords.length() > 220) {
+                break;
+            }
+            String word = queryArray.get(i);
+            int wordIndex = html.indexOf(word);
+
+            if (wordIndex == -1) {
+                continue;
+            }
+            int start = (wordIndex - 20) > 20 ? (wordIndex - 20) : wordIndex;
+            int finish = start + 51 > html.length() ? html.length() - 1 : start + 50;
+
+            someWords.append(html, start, wordIndex);
+            someWords.append("<b>");
+            someWords.append(word);
+            someWords.append("</b>");
+            someWords.append(html, wordIndex + word.length(), finish);
+            someWords.append(" ... ");
+        }
+
+        return someWords.toString();
+    }
+
+    private String markInBold (String text, List<String> queryArray) {
+        List<String> wordArray = new ArrayList<>();
+        for (String s : (text.split("\\s+"))) {
+            wordArray.add(s);
+        }
+
+        for (int i = 0; i < wordArray.size(); i++) {
+            String word = wordArray.get(i);
+            if (queryArray.stream().anyMatch(x -> word.contains(x))) {
+                wordArray.set(i, "<b>".concat(word).concat("</b>"));
+            }
+        }
+
+        return String.join(" ", wordArray);
+    }
+
 }

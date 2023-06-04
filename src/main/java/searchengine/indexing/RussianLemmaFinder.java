@@ -1,4 +1,4 @@
-package searchengine.dto.indexing;
+package searchengine.indexing;
 
 import org.apache.lucene.morphology.LuceneMorphology;
 import org.apache.lucene.morphology.russian.RussianLuceneMorphology;
@@ -72,6 +72,11 @@ public class RussianLemmaFinder {
                 .replaceAll("([^а-я\\s])", " ")
                 .trim()
                 .split("\\s+");
+    }
+
+    public boolean checkWordIsParticle (String word) {
+        List<String> wordBaseForms = luceneMorphology.getMorphInfo(word);
+        return anyWordBaseBelongToParticle(wordBaseForms);
     }
 
 

@@ -4,10 +4,11 @@ import lombok.RequiredArgsConstructor;
 import org.jsoup.nodes.Document;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import searchengine.config.ConnectionData;
 import searchengine.config.SitesList;
 import searchengine.dto.indexing.IndexingResponse;
-import searchengine.dto.indexing.PageIndexer;
-import searchengine.dto.indexing.SiteInformationAdder;
+import searchengine.indexing.PageIndexer;
+import searchengine.indexing.SiteInformationAdder;
 import searchengine.model.Page;
 import searchengine.model.Site;
 import searchengine.model.Status;
@@ -36,6 +37,8 @@ public class IndexingServiceImpl implements IndexingService {
     @Autowired
     private LemmaRepository lemmaRepository;
     private final SitesList sites;
+
+    private final ConnectionData connectionData;
 
     private static ArrayList<Thread> threads = new ArrayList<>();
     private ArrayList<ForkJoinPool> pools = new ArrayList<>();
@@ -100,7 +103,7 @@ public class IndexingServiceImpl implements IndexingService {
         ForkJoinPool forkJoinPool = new ForkJoinPool(numberOfCores);
         pools.add(forkJoinPool);
         String pages = forkJoinPool.invoke(new PageIndexer(
-                new SiteInformationAdder(siteRepository, pageRepository, indexRepository, lemmaRepository),
+                new SiteInformationAdder(siteRepository, pageRepository, indexRepository, lemmaRepository, connectionData),
                 site, url, new CopyOnWriteArrayList<>()));
 
         if (!site.getStatus().equals(Status.FAILED)) {
@@ -111,7 +114,7 @@ public class IndexingServiceImpl implements IndexingService {
     }
 
     @Override
-    public IndexingResponse OnePageParser(String url) {
+    public IndexingResponse onePageIndexing(String url) {
 
         if (threadIsAlive()) {
             return falseResponse("Индексация уже запущена");
@@ -133,14 +136,14 @@ public class IndexingServiceImpl implements IndexingService {
             return falseResponse("Данная страница находится за пределами сайтов, указанных в конфигурационном файле");
         }
 
-        Site site = addSiteForOnePage(url, siteUrl, siteName);
-        var siteInfo = new SiteInformationAdder(siteRepository, pageRepository, indexRepository, lemmaRepository);
-        Document page = siteInfo.addOnePage(site,url);
+        Site site = getSiteForOnePageIndexing(url, siteUrl, siteName);
+        var siteInfo = new SiteInformationAdder(siteRepository, pageRepository, indexRepository, lemmaRepository, connectionData);
+        Document page = siteInfo.addOrUpdatePage(site,url);
 
         return trueResponse();
     }
 
-    private Site addSiteForOnePage (String url, String siteUrl, String siteName) {
+    private Site getSiteForOnePageIndexing(String url, String siteUrl, String siteName) {
         for (Site site : siteRepository.findAll()) {
             if (url.startsWith(site.getUrl())) {
                 return site;
@@ -198,4 +201,3 @@ public class IndexingServiceImpl implements IndexingService {
         return response;
     }
 }
-

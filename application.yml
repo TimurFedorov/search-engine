@@ -17,7 +17,11 @@ indexing-settings:
   sites:
     - url: https://et-cetera.ru/
       name: Театр Et-cetera
-    - url: https://www.playback.ru
+    - url: https://www.playback.ru/
       name: PlayBack.Ru
-    - url: https://www.ipfran.ru
+    - url: https://www.ipfran.ru/
       name: ИПФ РАН
+
+connection-data:
+  user-agent: Mozilla/5.0 (Windows; U; WindowsNT 5.1; en-US; rv1.8.1.6) Gecko/20070725 Firefox/2.0.0.6
+  refferer: http://www.google.com

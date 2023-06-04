@@ -1,4 +1,4 @@
-package searchengine.dto.indexing;
+package searchengine.indexing;
 
 import lombok.AllArgsConstructor;
 import org.jsoup.nodes.Document;

@@ -1,9 +1,10 @@
-package searchengine.dto.indexing;
+package searchengine.indexing;
 
 import lombok.AllArgsConstructor;
 import org.jsoup.Connection;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
+import searchengine.config.ConnectionData;
 import searchengine.model.*;
 import searchengine.repositories.IndexRepository;
 import searchengine.repositories.LemmaRepository;
@@ -22,6 +23,8 @@ public class SiteInformationAdder {
     private PageRepository pageRepository;
     private IndexRepository indexRepository;
     private LemmaRepository lemmaRepository;
+
+    private final ConnectionData connectionData;
 
     public Document addPage(Site site, String url) {
         try {
@@ -52,7 +55,7 @@ public class SiteInformationAdder {
         return null;
     }
 
-    public Document addOnePage (Site site, String url) {
+    public Document addOrUpdatePage(Site site, String url) {
         String path = url.substring(site.getUrl().length() - 1);
         if(!pageRepository.findByPathAndSite(path, site).isPresent()) {
             return addPage(site, url);
@@ -133,12 +136,12 @@ public class SiteInformationAdder {
         }
     }
 
-    public static Connection.Response getConnectionResponse(String url) throws IOException {
+    public Connection.Response getConnectionResponse(String url) throws IOException {
         return Jsoup.connect(url)
                 .ignoreContentType(true)
                 .ignoreHttpErrors(true)
-                .userAgent("Mozilla/5.0 (Windows; U; WindowsNT 5.1; en-US; rv1.8.1.6) Gecko/20070725 Firefox/2.0.0.6")
-                .referrer("http://www.google.com")
+                .userAgent(connectionData.getUserAgent())
+                .referrer(connectionData.getReferrer())
                 .execute();
     }
 

@@ -2,9 +2,7 @@ package searchengine.dto.indexing;
 
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import lombok.AllArgsConstructor;
 import lombok.Data;
-import lombok.RequiredArgsConstructor;
 
 @Data
 public class IndexingResponse {
