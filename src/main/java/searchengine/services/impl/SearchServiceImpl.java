@@ -57,14 +57,14 @@ public class SearchServiceImpl implements SearchService {
             return response;
         }
 
-        List<SearchData> data = searchData(query, url);
+        List<SearchData> data = SearchData(query, url);
         response.setResult(true);
         response.setData(data);
         response.setCount(data.size());
         return response;
     }
 
-    private List<SearchData> searchData (String query, String url) {
+    private List<SearchData> SearchData(String query, String url) {
         List<SearchData> data = new ArrayList<>();
 
         List<Site> siteList = new ArrayList<>();
@@ -75,7 +75,7 @@ public class SearchServiceImpl implements SearchService {
         }
 
         for (Site site : siteList) {
-            List<Lemma> queryLemmas = sortedExistingLemmaList(russianLemmaFinder.getLemmaSet(query), site);
+            List<Lemma> queryLemmas = getSortedExistingLemmaList(russianLemmaFinder.getLemmaSet(query), site);
             List<Page> pages = findPagesByQueryLemmas(queryLemmas);
             for (Page page : pages) {
                 data.add(PageData(page, site, query, queryLemmas));
@@ -87,7 +87,7 @@ public class SearchServiceImpl implements SearchService {
     }
 
 
-    private List<Lemma> sortedExistingLemmaList(Set<String> lemmasSet, Site site) {
+    private List<Lemma> getSortedExistingLemmaList(Set<String> lemmasSet, Site site) {
         List<Lemma> lemmas = new ArrayList<>();
         for (String lemma : lemmasSet) {
             if (lemmaRepository.findByTextAndSite(lemma, site).isPresent())

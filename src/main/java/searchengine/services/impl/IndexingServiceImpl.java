@@ -18,6 +18,8 @@ import searchengine.repositories.PageRepository;
 import searchengine.repositories.SiteRepository;
 import searchengine.services.IndexingService;
 
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -51,8 +53,8 @@ public class IndexingServiceImpl implements IndexingService {
     @Override
     public IndexingResponse startIndexing() {
 
-        if (threadIsAlive()) {
-            return falseResponse("Индексация уже запущена");
+        if (checkThreadIsAlive()) {
+            return getFalseResponse("Индексация уже запущена");
         }
 
         threads.clear();
@@ -62,21 +64,21 @@ public class IndexingServiceImpl implements IndexingService {
             int threadNumber = i;
             Runnable task = () -> {
                 String url = SiteInformationAdder.getCorrectUrlFormat(sites.getSites().get(threadNumber).getUrl());
-                siteIndexer(url, sites.getSites().get(threadNumber).getName());
+                indexSite(url, sites.getSites().get(threadNumber).getName());
             };
             Thread thread = new Thread(task);
             threads.add(thread);
         }
         threads.forEach(Thread::start);
 
-        return trueResponse();
+        return getTrueResponse();
     }
 
     @Override
     public IndexingResponse stopIndexing() {
 
-        if (!threadIsAlive()) {
-            return falseResponse("Индексация не запущена");
+        if (!checkThreadIsAlive()) {
+            return getFalseResponse("Индексация не запущена");
         }
 
         pools.forEach(ForkJoinPool::shutdownNow);
@@ -90,10 +92,10 @@ public class IndexingServiceImpl implements IndexingService {
 
         siteRepository.findAll().forEach(this::addSiteFailedStatus);
 
-        return trueResponse();
+        return getTrueResponse();
     }
 
-    private void siteIndexer(String url, String name) {
+    private void indexSite(String url, String name) {
 
         if (siteRepository.findByUrl(url).isPresent()) {
             url = deleteSiteInformation(url);
@@ -114,10 +116,10 @@ public class IndexingServiceImpl implements IndexingService {
     }
 
     @Override
-    public IndexingResponse onePageIndexing(String url) {
+    public IndexingResponse indexOnePage (String url) {
 
-        if (threadIsAlive()) {
-            return falseResponse("Индексация уже запущена");
+        if (checkThreadIsAlive()) {
+            return getFalseResponse("Индексация уже запущена");
         }
 
         url = SiteInformationAdder.getCorrectUrlFormat(url);
@@ -129,25 +131,32 @@ public class IndexingServiceImpl implements IndexingService {
                 siteIsInConfig = true;
                 siteUrl = SiteInformationAdder.getCorrectUrlFormat(siteCfg.getUrl());
                 siteName = siteCfg.getName();
+                break;
             }
         }
 
         if (!siteIsInConfig) {
-            return falseResponse("Данная страница находится за пределами сайтов, указанных в конфигурационном файле");
+            return getFalseResponse("Данная страница находится за пределами сайтов, указанных в конфигурационном файле");
         }
 
         Site site = getSiteForOnePageIndexing(url, siteUrl, siteName);
         var siteInfo = new SiteInformationAdder(siteRepository, pageRepository, indexRepository, lemmaRepository, connectionData);
         Document page = siteInfo.addOrUpdatePage(site,url);
 
-        return trueResponse();
+        return getTrueResponse();
     }
 
     private Site getSiteForOnePageIndexing(String url, String siteUrl, String siteName) {
-        for (Site site : siteRepository.findAll()) {
-            if (url.startsWith(site.getUrl())) {
-                return site;
-            }
+        URI uri = null;
+        try {
+            uri = new URI(url);
+        } catch (URISyntaxException e) {
+            throw new RuntimeException(e);
+        }
+        String domain = SiteInformationAdder.getCorrectUrlFormat(uri.getHost());
+
+        if (siteRepository.findByUrl(domain).isPresent()) {
+                return siteRepository.findByUrl(domain).get();
         }
         return addNewSite(siteUrl, siteName, Status.INDEXED);
     }
@@ -184,17 +193,17 @@ public class IndexingServiceImpl implements IndexingService {
         siteRepository.save(site);
     }
 
-    public static boolean threadIsAlive() {
+    public static boolean checkThreadIsAlive() {
         return threads.stream().anyMatch(Thread::isAlive);
     }
 
-    private IndexingResponse trueResponse () {
+    private IndexingResponse getTrueResponse() {
         IndexingResponse response = new IndexingResponse();
         response.setResult(true);
         return response;
     }
 
-    private IndexingResponse falseResponse (String message) {
+    private IndexingResponse getFalseResponse(String message) {
         IndexingResponse response = new IndexingResponse();
         response.setResult(false);
         response.setError(message);

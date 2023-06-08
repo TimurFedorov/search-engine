@@ -55,7 +55,7 @@ public class StatisticsServiceImpl implements StatisticsService {
     private TotalStatistics total() {
         TotalStatistics total = new TotalStatistics();
         total.setSites(siteCount);
-        total.setIndexing(IndexingServiceImpl.threadIsAlive());
+        total.setIndexing(IndexingServiceImpl.checkThreadIsAlive());
         total.setPages(pageRepository.findAll().size());
         total.setLemmas(lemmaRepository.findAll().size());
         return total;
