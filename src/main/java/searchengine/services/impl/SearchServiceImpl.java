@@ -147,7 +147,11 @@ public class SearchServiceImpl implements SearchService {
     }
 
     private String addDescription (Document doc, List<String> queryArray) {
-        String description = doc.getElementsByAttributeValue("name", "description").get(0).attr("content");
+        Elements elements = doc.getElementsByAttributeValue("name", "description");
+        if (elements.isEmpty()) {
+            return "";
+        }
+        String description = elements.get(0).attr("content");
         return markInBold(description, queryArray);
     }
 
@@ -204,7 +208,7 @@ public class SearchServiceImpl implements SearchService {
 
         for (int i = 0; i < wordArray.size(); i++) {
             String word = wordArray.get(i);
-            if (queryArray.stream().anyMatch(x -> word.contains(x))) {
+            if (queryArray.stream().anyMatch(queryWord -> word.startsWith(queryWord))) {
                 wordArray.set(i, "<b>".concat(word).concat("</b>"));
             }
         }
