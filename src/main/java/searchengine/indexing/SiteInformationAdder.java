@@ -14,7 +14,10 @@ import searchengine.services.impl.IndexingServiceImpl;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Optional;
 
 @AllArgsConstructor
 public class SiteInformationAdder {
@@ -85,38 +88,43 @@ public class SiteInformationAdder {
         return null;
     }
 
-    public synchronized void addRussianLemmas(Document document, Site site, Page page) throws IOException {
+    public void addRussianLemmas(Document document, Site site, Page page) throws IOException {
 
         RussianLemmaFinder russianLemmaFinder = new RussianLemmaFinder();
-
         HashMap<String, Integer> lemmas = russianLemmaFinder.collectLemmas(document.toString());
 
-        for (String lemmaText : lemmas.keySet()) {
-            if (IndexingServiceImpl.isCanceled()) {
-                break;
+        List<Lemma> lemmasForDataBase = new ArrayList<>();
+        List<Index> indexesForDataBase = new ArrayList<>();
+        synchronized (lemmaRepository) {
+            for (String lemmaText : lemmas.keySet()) {
+                if (IndexingServiceImpl.isCanceled()) {
+                    break;
+                }
+                Lemma lemma;
+                Optional<Lemma> lemmaOrNull = lemmaRepository.findByTextAndSite(lemmaText, site);
+                if (lemmaOrNull.isPresent()) {
+                    lemma = lemmaOrNull.get();
+                    lemma.setFrequency(lemma.getFrequency() + 1);
+                } else {
+                    lemma = new Lemma();
+                    lemma.setSite(site);
+                    lemma.setFrequency(1);
+                    lemma.setText(lemmaText);
+                }
+                lemmasForDataBase.add(lemma);
+                indexesForDataBase.add(addIndex(lemma, page, lemmas.get(lemmaText)));
             }
-            Lemma lemma;
-            if (lemmaRepository.findByTextAndSite(lemmaText,site).isPresent()) {
-                lemma = lemmaRepository.findByTextAndSite(lemmaText,site).get();
-                lemma.setFrequency(lemma.getFrequency() + 1);
-            }
-            else {
-                lemma = new Lemma();
-                lemma.setSite(site);
-                lemma.setFrequency(1);
-            }
-            lemma.setText(lemmaText);
-            lemmaRepository.save(lemma);
-            addIndex(lemma, page, lemmas.get(lemmaText));
+            lemmaRepository.saveAll(lemmasForDataBase);
+            indexRepository.saveAll(indexesForDataBase);
         }
     }
 
-    private void addIndex (Lemma lemma,Page page, int rank) {
+    private Index addIndex (Lemma lemma,Page page, int rank) {
         Index index = new Index();
         index.setPage(page);
         index.setLemma(lemma);
         index.setRank(rank);
-        indexRepository.save(index);
+        return index;
     }
 
     public static String getCorrectUrlFormat (String url) {
