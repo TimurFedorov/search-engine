@@ -18,7 +18,7 @@ public class Lemma {
     @JoinColumn(name = "site_id", nullable = false)
     private Site site;
 
-    @Column(columnDefinition = "VARCHAR(255)", nullable = false)
+    @Column(name = "text", columnDefinition = "VARCHAR(255) NOT NULL, KEY text_index" )
     private String text;
 
     @Column(nullable = false)
