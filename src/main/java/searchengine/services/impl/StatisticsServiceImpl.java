@@ -37,18 +37,22 @@ public class StatisticsServiceImpl implements StatisticsService {
     private int siteCount;
 
     @Override
-    public StatisticsResponse getStatistics() {
+    public synchronized StatisticsResponse getStatistics() {
+
         siteCount = sites.getSites().size();
+
         StatisticsData data = new StatisticsData();
-        data.setTotal(getTotal());
-        data.setDetailed(getDetailed());
+        data.setTotal(total());
+        data.setDetailed(detailed());
+
         StatisticsResponse response = new StatisticsResponse();
         response.setStatistics(data);
         response.setResult(true);
+
         return response;
     }
 
-    private TotalStatistics getTotal() {
+    private TotalStatistics total() {
         TotalStatistics total = new TotalStatistics();
         total.setSites(siteCount);
         total.setIndexing(IndexingServiceImpl.checkThreadIsAlive());
@@ -57,17 +61,17 @@ public class StatisticsServiceImpl implements StatisticsService {
         return total;
     }
 
-    private List<DetailedStatisticsItem> getDetailed() {
+    private List<DetailedStatisticsItem> detailed () {
         List<DetailedStatisticsItem> detailed = new ArrayList<>();
         for (int i = 0; i < siteCount; i++) {
             String name = sites.getSites().get(i).getName();
             String url = SiteInformationAdder.getCorrectUrlFormat(sites.getSites().get(i).getUrl());
-            detailed.add(getItem(name, url));
+            detailed.add(item(name, url));
         }
         return detailed;
     }
 
-    private DetailedStatisticsItem getItem(String name, String url) {
+    private DetailedStatisticsItem item(String name, String url) {
         DetailedStatisticsItem item = new DetailedStatisticsItem();
         item.setName(name);
         item.setUrl(url);
