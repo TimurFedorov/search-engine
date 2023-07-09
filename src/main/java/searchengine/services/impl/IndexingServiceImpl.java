@@ -17,13 +17,14 @@ import searchengine.repositories.LemmaRepository;
 import searchengine.repositories.PageRepository;
 import searchengine.repositories.SiteRepository;
 import searchengine.services.IndexingService;
-
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ForkJoinPool;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 
 @Service
@@ -39,27 +40,22 @@ public class IndexingServiceImpl implements IndexingService {
     @Autowired
     private LemmaRepository lemmaRepository;
     private final SitesList sites;
-
     private final ConnectionData connectionData;
-
     private static ArrayList<Thread> threads = new ArrayList<>();
     private ArrayList<ForkJoinPool> pools = new ArrayList<>();
-
     private static volatile boolean isCanceled = false;
+
     public static boolean isCanceled() {
         return isCanceled;
     }
 
     @Override
     public IndexingResponse startIndexing() {
-
         if (checkThreadIsAlive()) {
             return getFalseResponse("Индексация уже запущена");
         }
-
         threads.clear();
         pools.clear();
-
         for (int i = 0; i < sites.getSites().size(); i++) {
             int threadNumber = i;
             Runnable task = () -> {
@@ -70,17 +66,14 @@ public class IndexingServiceImpl implements IndexingService {
             threads.add(thread);
         }
         threads.forEach(Thread::start);
-
         return getTrueResponse();
     }
 
     @Override
     public IndexingResponse stopIndexing() {
-
         if (!checkThreadIsAlive()) {
             return getFalseResponse("Индексация не запущена");
         }
-
         pools.forEach(ForkJoinPool::shutdownNow);
         isCanceled = true;
         for (ForkJoinPool pool : pools) {
@@ -89,25 +82,20 @@ public class IndexingServiceImpl implements IndexingService {
         threads.clear();
         pools.clear();
         isCanceled = false;
-
         siteRepository.findAll().forEach(this::addSiteFailedStatus);
-
         return getTrueResponse();
     }
 
     private void indexSite(String url, String name) {
-
         if (siteRepository.findByUrl(url).isPresent()) {
             url = deleteSiteInformation(url);
         }
         Site site = addNewSite(url, name, Status.INDEXING);
-
         ForkJoinPool forkJoinPool = new ForkJoinPool(numberOfCores);
         pools.add(forkJoinPool);
         String pages = forkJoinPool.invoke(new PageIndexer(
                 new SiteInformationAdder(siteRepository, pageRepository, indexRepository, lemmaRepository, connectionData),
                 site, url, new CopyOnWriteArrayList<>()));
-
         if (!site.getStatus().equals(Status.FAILED)) {
             site.setStatus(Status.INDEXED);
             site.setStatusTime(LocalDateTime.now());
@@ -117,11 +105,9 @@ public class IndexingServiceImpl implements IndexingService {
 
     @Override
     public IndexingResponse indexOnePage (String url) {
-
         if (checkThreadIsAlive()) {
             return getFalseResponse("Индексация уже запущена");
         }
-
         url = SiteInformationAdder.getCorrectUrlFormat(url);
         String siteUrl = null;
         String siteName = null;
@@ -134,24 +120,22 @@ public class IndexingServiceImpl implements IndexingService {
                 break;
             }
         }
-
         if (!siteIsInConfig) {
             return getFalseResponse("Данная страница находится за пределами сайтов, указанных в конфигурационном файле");
         }
-
         Site site = getSiteForOnePageIndexing(url, siteUrl, siteName);
         var siteInfo = new SiteInformationAdder(siteRepository, pageRepository, indexRepository, lemmaRepository, connectionData);
         Document page = siteInfo.addOrUpdatePage(site,url);
-
         return getTrueResponse();
     }
 
     private Site getSiteForOnePageIndexing(String url, String siteUrl, String siteName) {
         URI uri = null;
+        Logger logger = LogManager.getRootLogger();
         try {
             uri = new URI(url);
         } catch (URISyntaxException e) {
-            throw new RuntimeException(e);
+            logger.error(e.getMessage());
         }
         String domain = SiteInformationAdder.getCorrectUrlFormat(uri.getHost());
 

@@ -19,6 +19,9 @@ import searchengine.repositories.LemmaRepository;
 import searchengine.repositories.PageRepository;
 import searchengine.repositories.SiteRepository;
 import searchengine.services.SearchService;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 
 import java.io.IOException;
 import java.util.*;
@@ -36,53 +39,48 @@ public class SearchServiceImpl implements SearchService {
     @Autowired
     private IndexRepository indexRepository;
 
-    private static RussianLemmaFinder russianLemmaFinder;
+    private RussianLemmaFinder russianLemmaFinder;
+    private final Logger logger = LogManager.getRootLogger();
 
     {
         try {
             russianLemmaFinder = new RussianLemmaFinder();
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            logger.error(e.getMessage());;
         }
     }
 
     @Override
     public SearchResponse startSearch(String query, String url) {
-
         SearchResponse response = new SearchResponse();
-
         if (query.isBlank()) {
             response.setResult(false);
             response.setError("Задан пустой поисковый запрос");
             return response;
         }
-
-        List<SearchData> data = SearchData(query, url);
+        List<SearchData> data = getSearchData(query, url);
         response.setResult(true);
         response.setData(data);
         response.setCount(data.size());
         return response;
     }
 
-    private List<SearchData> SearchData(String query, String url) {
+    private List<SearchData> getSearchData(String query, String url) {
         List<SearchData> data = new ArrayList<>();
-
         List<Site> siteList = new ArrayList<>();
         if (url.isEmpty()) {
             siteList = siteRepository.findAll();
         } else {
             siteList.add(siteRepository.findByUrl(url).get());
         }
-
         for (Site site : siteList) {
             List<Lemma> queryLemmas = getSortedExistingLemmaList(russianLemmaFinder.getLemmaSet(query), site);
             List<Page> pages = findPagesByQueryLemmas(queryLemmas);
             for (Page page : pages) {
-                data.add(PageData(page, site, query, queryLemmas));
+                data.add(getPageData(page, site, query, queryLemmas));
             }
         }
         Collections.sort(data, (o1, o2) -> o2.getRelevance().compareTo(o1.getRelevance()));
-
         return data;
     }
 
@@ -97,7 +95,7 @@ public class SearchServiceImpl implements SearchService {
         return lemmas;
     }
 
-    private SearchData PageData(Page page, Site site, String query, List<Lemma> lemmas) {
+    private SearchData getPageData(Page page, Site site, String query, List<Lemma> lemmas) {
         SearchData pageData = new SearchData();
         pageData.setSite(site.getUrl());
         pageData.setUri(page.getPath());
@@ -110,19 +108,16 @@ public class SearchServiceImpl implements SearchService {
     }
 
     private String addSnippet(String html, String query) {
-
         List<String> queryArray = Arrays.stream(query.trim().toLowerCase().split("\\s+"))
                 .filter(i -> !russianLemmaFinder.checkWordIsParticle(i)).toList();
         StringBuilder snippet = new StringBuilder();
         Document doc = Jsoup.parse(html);
-
         String description = addDescription(doc, queryArray);
         snippet.append(description.concat(" ... "));
         String keyWords = addKeyWords(doc,queryArray,snippet.length());
         snippet.append(keyWords);
         String additionalWords = addSomeWords(html,queryArray,snippet.length());
         snippet.append(additionalWords);
-
         return snippet.toString();
     }
 
@@ -130,7 +125,6 @@ public class SearchServiceImpl implements SearchService {
         if (lemmas.isEmpty()) {
             return new ArrayList<>();
         }
-
         List<Page> pages = getPageList(lemmas.get(0));
         for (int i = 1; i < lemmas.size(); i++) {
             List<Page> temporaryPages = getPageList(lemmas.get(i));
@@ -175,7 +169,6 @@ public class SearchServiceImpl implements SearchService {
                 .replaceAll("([^а-я\\s])", " ")
                 .replaceAll("\\s+", " ").trim();
         StringBuilder someWords = new StringBuilder();
-
         for (int i = 0; i < queryArray.size(); i++) {
             if (length + someWords.length() > 220) {
                 break;
@@ -188,7 +181,6 @@ public class SearchServiceImpl implements SearchService {
             }
             int start = (wordIndex - 20) > 20 ? (wordIndex - 20) : wordIndex;
             int finish = start + 51 > html.length() ? html.length() - 1 : start + 50;
-
             someWords.append(html, start, wordIndex);
             someWords.append("<b>");
             someWords.append(word);
@@ -196,7 +188,6 @@ public class SearchServiceImpl implements SearchService {
             someWords.append(html, wordIndex + word.length(), finish);
             someWords.append(" ... ");
         }
-
         return someWords.toString();
     }
 
@@ -205,14 +196,12 @@ public class SearchServiceImpl implements SearchService {
         for (String s : (text.split("\\s+"))) {
             wordArray.add(s);
         }
-
         for (int i = 0; i < wordArray.size(); i++) {
             String word = wordArray.get(i);
             if (queryArray.stream().anyMatch(queryWord -> word.startsWith(queryWord))) {
                 wordArray.set(i, "<b>".concat(word).concat("</b>"));
             }
         }
-
         return String.join(" ", wordArray);
     }
 
