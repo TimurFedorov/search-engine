@@ -11,7 +11,7 @@ import java.util.Optional;
 @Repository
 public interface LemmaRepository extends JpaRepository<Lemma,Long> {
     Optional<Lemma> findByTextAndSite(String lemma, Site site);
-    List<Lemma> findAllBySite(Site site);
+    int countBySite (Site site);
     @Transactional
     Integer deleteAllBySite (Site site);
 }

@@ -13,7 +13,7 @@ import java.util.Optional;
 @Repository
 public interface PageRepository extends JpaRepository<Page,Long> {
     Optional<Page> findByPathAndSite (String path, Site site);
-    List<Page> findAllBySite(Site site);
+    int countBySite (Site site);
     @Transactional
     Integer deleteAllBySite(Site site);
 }
