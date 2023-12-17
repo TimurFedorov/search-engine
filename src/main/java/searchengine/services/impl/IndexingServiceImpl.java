@@ -158,11 +158,8 @@ public class IndexingServiceImpl implements IndexingService {
 
     private String deleteSiteInformation (String url) {
         Site siteForDelete = siteRepository.findByUrl(url).get();
-        for (Page page : pageRepository.findAllBySite(siteForDelete)) {
-            indexRepository.deleteAllByPage(page);
-        }
-        lemmaRepository.deleteAllBySite(siteForDelete);
         pageRepository.deleteAllBySite(siteForDelete);
+        lemmaRepository.deleteAllBySite(siteForDelete);
         siteRepository.delete(siteForDelete);
         return url;
     }

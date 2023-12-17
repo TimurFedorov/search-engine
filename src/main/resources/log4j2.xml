@@ -1,24 +1,22 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<configuration status="ERROR">
-    <appenders>
-        <File name="Info" fileName="logs/info.log">
-            <PatternLayout pattern="%d{yyy-MM-dd HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n"/>
-            <Filters>
-                <ThresholdFilter level="warn" onMatch="DENY" onMismatch="NEUTRAL" />
-            </Filters>
-        </File>
+<configuration>
+<appenders>
+    <Console name="Console" target="SYSTEM_OUT">
+        <PatternLayout
+                pattern="%style{%d{ISO8601}}{black} %highlight{%-5level }[%style{%t}{bright,blue}] %style{%C{1.}}{bright,yellow}: %msg%n%throwable" />
+    </Console>
 
-        <File name="Errors" fileName="logs/errors.log">
-            <PatternLayout pattern="%d{yyy-MM-dd HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n"/>
-        </File>
+    <File name="Errors" fileName="logs/errors.log">
+        <PatternLayout pattern="%d{yyy-MM-dd HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n"/>
+    </File>
 
-    </appenders>
-    <loggers>
+</appenders>
+<loggers>
 
-        <root level = "info">
-            <appender-ref ref="Info" level = "info"/>
-            <appender-ref ref="Errors" level="error"/>
-        </root>
+    <Root level="info">
+        <AppenderRef ref="Console" />
+        <AppenderRef ref="Errors" level = "error"/>
+    </Root>
 
-    </loggers>
+</loggers>
 </configuration>

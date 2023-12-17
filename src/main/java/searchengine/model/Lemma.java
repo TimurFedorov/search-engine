@@ -4,7 +4,6 @@ import lombok.Getter;
 import lombok.Setter;
 
 import javax.persistence.*;
-import java.util.List;
 
 @Getter
 @Setter
@@ -18,7 +17,7 @@ public class Lemma {
     @JoinColumn(name = "site_id", nullable = false)
     private Site site;
 
-    @Column(name = "text", columnDefinition = "VARCHAR(255) NOT NULL, KEY text_index" )
+    @Column(name = "text", columnDefinition = "VARCHAR(255) NOT NULL, KEY text_index(text(255))" )
     private String text;
 
     @Column(nullable = false)
